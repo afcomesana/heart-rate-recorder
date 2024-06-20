@@ -1,2 +1,4 @@
 fitbit-app/node_modules
 fitbit-app/build
+imu-recorder/node_modules
+imu-recorder/build

@@ -71,10 +71,17 @@ class HttpRequestHandler(BaseHTTPRequestHandler):
         
         # Store the heart rate samples in the given filename, each byte is a heart rate sample
         try:
+            # if re.search(r'^trial_hr', filename) is not None:
             heart_rate_samples = self.rfile.read(nbytes)
-            
             with open(filename, "w") as fitbit_file:
                 fitbit_file.write(",".join([str(sample) for sample in heart_rate_samples]))
+                    
+            # else:
+            #     imu_samples = self.rfile.read(nbytes)
+                
+            #     with open(filename, "w") as fitbit_file:
+            #         for line in range(nbytes/90):
+                        
             
             self.send_http_response(HttpResponse(200, "OK"))
             
