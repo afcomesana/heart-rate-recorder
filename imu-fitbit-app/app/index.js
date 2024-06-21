@@ -14,9 +14,7 @@ import {
     statSync
 } from "fs";
 
-const APP_DIRECTORY    = "/private/data/";
-const SAMPLE_FREQUENCY = 30;
-const BATCH_SIZE       = 30;
+import { APP_DIRECTORY, SAMPLE_FREQUENCY, BATCH_SIZE } from "../common/constants";
 
 let accFilename        = null,
     accFileDescriptor  = null,
@@ -30,6 +28,8 @@ me.appTimeoutEnabled = false;
 // Get smartwatch screen elements
 const manageRecordingButton = document.getElementById("manage-recording-button");
 const manageRecordingText   = document.getElementById("manage-recording-text");
+
+console.log(statSync("trial_acc_2024-6-20_16-24-44").size)
 
 // Accelerometer:
 const accelerometer = new Accelerometer({frequency: SAMPLE_FREQUENCY, batch: BATCH_SIZE});
@@ -87,8 +87,6 @@ manageRecordingButton.addEventListener("click", () => {
 // Periodically try to send stored files with heart rate samples
 setInterval(async () => {
 
-    console.log("starting interval to send files")
-
     // Prevent this function to run multiple times at once or if the server that has
     // to receive the samples is not up or its address is not known.
     if ( isSendingFiles || !hostIp ) {
@@ -100,14 +98,14 @@ setInterval(async () => {
     // Send files from smartwatch to phone:    
     const listDir = listDirSync(APP_DIRECTORY);
     let dirItem   = listDir.next();
-    console.log("About to iterate over current files")
+    
     while ( !dirItem.done ) {
 
-        console.log(`evaluating ${dirItem.value} to send`)
+        console.log(`evaluating ${dirItem.value} to send ${!/^trial/.test(dirItem.value)}`)
 
         // Only send files that store heart rate samples (the ones that start with
         // "trial") and prevent sending the one that is currently being written
-        if (dirItem.value == filename || !/^trial/.test(dirItem.value) ) {
+        if (dirItem.value == accFilename || dirItem.value == gyroFilename || !/^trial/.test(dirItem.value) ) {
             dirItem = listDir.next();
             continue;
         }

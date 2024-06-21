@@ -1,8 +1,13 @@
 import re
+import struct
 from collections import namedtuple
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 HttpResponse = namedtuple("HttpResponse", ["code", "message"])
+
+HEART_RATE_FILE_PATTERN = r'^trial\_hr'
+IMU_FILE_PATTERN        = r'^trial\_(acc|gyro)'
+IMU_AXIS_NAMES          = ["x", "y", "z"]
 
 class HttpRequestHandler(BaseHTTPRequestHandler):
     """
@@ -53,6 +58,7 @@ class HttpRequestHandler(BaseHTTPRequestHandler):
         - Correct headers:
         - - Content-length: number of bytes, namely heart rate samples, present in the file
         - - X_FITBIT_FILENAME: name of the file that will store the heart rate samples
+        - - X_FITBIT_BATCH_SIZE: number of samples consecutively read in smartwatch
         """
         
         # Ensure correct path of the request
@@ -61,8 +67,8 @@ class HttpRequestHandler(BaseHTTPRequestHandler):
         
         # Get from the request the number of heart rate samples and the filename to store them  
         try:
-            nbytes = int(self.headers["Content-length"])
-            filename = self.headers["X_FITBIT_FILENAME"]
+            nbytes     = int(self.headers["Content-length"])
+            filename   = self.headers["X_FITBIT_FILENAME"]
             
         # Some of header is missing, request ill formed
         except KeyError as e:
@@ -70,26 +76,77 @@ class HttpRequestHandler(BaseHTTPRequestHandler):
             return
         
         # Store the heart rate samples in the given filename, each byte is a heart rate sample
-        try:
-            # if re.search(r'^trial_hr', filename) is not None:
-            heart_rate_samples = self.rfile.read(nbytes)
-            with open(filename, "w") as fitbit_file:
-                fitbit_file.write(",".join([str(sample) for sample in heart_rate_samples]))
-                    
-            # else:
-            #     imu_samples = self.rfile.read(nbytes)
+        if re.search(HEART_RATE_FILE_PATTERN, filename) is not None:
+            try:
+                heart_rate_samples = self.rfile.read(nbytes)
+                with open(filename, "w") as fitbit_file:
+                    fitbit_file.write(",".join([str(sample) for sample in heart_rate_samples]))
+            
+            # Unexpected error when storing heart rate samples:
+            except Exception as e:
+                print("Unexpected error when storing heart rate samples:", e)
+                self.send_http_response(HttpResponse(500, "Server error"))
+                return
                 
-            #     with open(filename, "w") as fitbit_file:
-            #         for line in range(nbytes/90):
-                        
+        # Store accelerometer or gyroscope samples. According to Accelerometer and Gyroscope API
+        # documentation:
+        # https://dev.fitbit.com/build/reference/device-api/gyroscope/#interface-batchedgyroscopereading
+        # https://dev.fitbit.com/build/reference/device-api/accelerometer/#interface-batchedaccelerometerreading
+        #
+        # samples of these sensors are stored in Float32Arrays, hence 4 bytes per sample are needed to decode
+        # the values of the samples:
+        elif re.search(IMU_FILE_PATTERN, filename) is not None:
             
-            self.send_http_response(HttpResponse(200, "OK"))
+            try:
+                batch_size = int(self.headers["X_FITBIT_BATCH_SIZE"])
+                
+            except KeyError as e:
+                self.send_http_response(HttpResponse(400, "Bad request"))
+                return
             
-        # Unexpected error when storing heart rate samples:
-        except Exception as e:
-            print("Unexpected error when storing heart rate samples:", e)
-            self.send_http_response(HttpResponse(500, "Server error"))
+            # Samples come without format. Readings are written one after the other in binary file
+            # that must be decoded. A number of samples equal to the 'batch_size' variable is written
+            # for an axis, then, the same number of samples is written for the next axis, and so on.
+            
+            # Define expected binary format of the samples of each axis to decode the float32 values
+            # (https://docs.python.org/3/library/struct.html#format-characters):
+            axis_values_binary_format = "<%sf" % batch_size
+            samples_per_line          = len(IMU_AXIS_NAMES)*batch_size
 
+            if nbytes % samples_per_line != 0:
+                print("Number of bytes received does not correspond with the number of axis and batch size.")
+                return
+
+            if filename == "trial_acc_2024-6-20_16-24-44":
+                print(filename, "size", nbytes)
+
+            with open(filename, "w") as fitbit_file:
+                
+                # Column names of the CSV file:
+                fitbit_file.write(",".join(IMU_AXIS_NAMES) + "\n")
+                
+                # Iterate in the total number of batches present in the received file:
+                for _ in range(int(nbytes / samples_per_line)):
+                    
+                    # Read 'batch_size' samples for every axis
+                    batch_values = self.rfile.read(batch_size*4)
+
+                    if filename == "trial_acc_2024-6-20_16-24-44":
+                        print(batch_values)
+                    
+                    axis_batch_values = [struct.unpack(axis_values_binary_format, batch_values) for _ in IMU_AXIS_NAMES]
+                    
+                    # Reorganize read data so that 1 sample of each axis is read in each iteration
+                    for line in zip(*axis_batch_values):
+                        fitbit_file.write(",".join([str(value) for value in line]) + "\n")
+        
+        # God knows what type of file is this:
+        else:
+            self.send_http_response(HttpResponse(400, "Bad request"))
+            return
+        
+        self.send_http_response(HttpResponse(200, "OK"))
+        
 
 def start_server(server_class=HTTPServer, handler_class=HttpRequestHandler):
     """

@@ -13,7 +13,12 @@
     "appDisplayName": "Imu Recorder",
     "iconFile": "resources/icon.png",
     "wipeColor": "#ffffff",
-    "requestedPermissions": [],
+    "requestedPermissions": [
+      "access_activity",
+      "access_internet",
+      "run_background",
+      "access_heart_rate"
+    ],
     "buildTargets": [
       "atlas",
       "vulcan"
