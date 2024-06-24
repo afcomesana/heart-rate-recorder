@@ -4,3 +4,4 @@ imu-fitbit-app/node_modules
 imu-fitbit-app/build
 .DS_Store
 trial_*
+__pycache__

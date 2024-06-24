@@ -10,7 +10,7 @@
   "fitbit": {
     "appUUID": "effc0d8b-345b-4a79-8c40-513fb23be5eb",
     "appType": "app",
-    "appDisplayName": "Imu Recorder",
+    "appDisplayName": "IMU Recorder",
     "iconFile": "resources/icon.png",
     "wipeColor": "#ffffff",
     "requestedPermissions": [

@@ -1,5 +1,5 @@
 import { inbox, outbox } from "file-transfer";
-import { BATCH_SIZE } from "../common/constants";
+import { BATCH_SIZE, AXIS_NAMES } from "../common/constants";
 
 /**
  * Add functionality to the string type so that it can be parsed to an ArrayBuffer
@@ -27,13 +27,12 @@ let hostIp           = "",
 // This must be changed if the local IP address of the phone does
 // not start with 192.168.0 or 192.168.1
 const LOCAL_NETWORK_IP_ADDRESSES = [...Array(256).keys()].map(digit => [`192.168.0.${digit}`, `192.168.1.${digit}`]).flat()
-// const LOCAL_NETWORK_IP_ADDRESSES = ["192.168.1.185"];
 
 /**
- * Send the heart rate data to the host.
+ * Send the IMU data to the host.
  * 
- * @param {InboxItem} file: that has just been received from the smartwatch with heart rate samples
- * @returns {String} the result of the attempt to send the heart rate data to the host
+ * @param {InboxItem} file: that has just been received from the smartwatch with IMU samples
+ * @returns {String} the result of the attempt to send the IMU data to the host
  */
 const sendFileToHost = async file => {
 
@@ -49,15 +48,15 @@ const sendFileToHost = async file => {
             body: buffer,
             headers: {
                 "Content-length": buffer.byteLength,
-                "X_FITBIT_FILENAME": file.name,
-                "X_FITBIT_BATCH_SIZE": BATCH_SIZE
+                "Fitbit-filename": file.name,
+                "Fitbit-batch-size": BATCH_SIZE
             }
         });
 
-        response = await response.text()
+        response = await response.text();
 
     } catch( error ) {
-        console.error(`Error when trying to send heart rate data to host: ${error}`);
+        console.error(`Error when trying to send IMU data to host: ${error}`);
         response = "ERROR"
     }
     
@@ -133,12 +132,10 @@ const processIncomingFiles = async () => {
     let file;
 
     while (( file = await inbox.pop() )) {
-
         // If file has been successfully sent to the host, tell the smartwatch to delete it
         if (await sendFileToHost(file) == "OK") {
             outbox.enqueue("delete_file", file.name.toArrayBuffer());
         }
-
     }
 }
 

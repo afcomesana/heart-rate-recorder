@@ -3,6 +3,7 @@ import * as document     from "document";
 import Accelerometer     from "accelerometer";
 import Gyroscope         from "gyroscope";
 import { me }            from "appbit";
+import { display }       from "display";
 
 import {
     openSync,
@@ -14,74 +15,82 @@ import {
     statSync
 } from "fs";
 
-import { APP_DIRECTORY, SAMPLE_FREQUENCY, BATCH_SIZE } from "../common/constants";
+import { APP_DIRECTORY, SAMPLE_FREQUENCY, BATCH_SIZE, AXIS_NAMES } from "../common/constants";
 
-let accFilename        = null,
-    accFileDescriptor  = null,
-    gyroFilename       = null,
-    gyroFileDescriptor = null,
-    isSendingFiles     = false,
-    hostIp             = "";
+let isSendingFiles     = false,
+    hostIp             = "",
+    isRecording        = false;
 
 me.appTimeoutEnabled = false;
+
+// Keep screen always on:
+setInterval(() => display.poke(), 1000);
+
 
 // Get smartwatch screen elements
 const manageRecordingButton = document.getElementById("manage-recording-button");
 const manageRecordingText   = document.getElementById("manage-recording-text");
 
-console.log(statSync("trial_acc_2024-6-20_16-24-44").size)
 
-// Accelerometer:
-const accelerometer = new Accelerometer({frequency: SAMPLE_FREQUENCY, batch: BATCH_SIZE});
-accelerometer.addEventListener("reading", () => {
-    
-    if ( !accFileDescriptor ) {
-        const date        = new Date();
-        accFilename       = `trial_acc_${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}_${date.getHours()}-${date.getMinutes()}-${date.getSeconds()}`;
-        accFileDescriptor = openSync(accFilename, "w");
+const SENSORS = [
+    {
+        "filePrefix": "acc",
+        "sensor": new Accelerometer({frequency: SAMPLE_FREQUENCY, batch: BATCH_SIZE}),
+        "fileDescriptor": null,
+        "filename": null
+    },
+    {
+        "filePrefix": "gyro",
+        "sensor": new Gyroscope({frequency: SAMPLE_FREQUENCY, batch: BATCH_SIZE}),
+        "fileDescriptor": null,
+        "filename": null
+    }
+]
+
+SENSORS.forEach(sensor => sensor.sensor.addEventListener("reading", () => readingCallback(sensor)));
+
+/**
+ * Create file for the given sensor and write batch readings in it.
+ * @param {Object} sensor: One of the objects in the SENSORS array.
+ */
+const readingCallback = sensor => {
+    if ( sensor.fileDescriptor == null ) {
+        const date            = new Date();
+        sensor.filename       = `trial_${sensor.filePrefix}_${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}_${date.getHours()}-${date.getMinutes()}-${date.getSeconds()}`;
+        sensor.fileDescriptor = openSync(sensor.filename, "w");
     }
 
-    writeSync(accFileDescriptor, accelerometer.readings.x);
-    writeSync(accFileDescriptor, accelerometer.readings.y);
-    writeSync(accFileDescriptor, accelerometer.readings.z);
-});
-
-// Gyroscope:
-const gyroscope = new Gyroscope({frequency: SAMPLE_FREQUENCY, batch: BATCH_SIZE});
-gyroscope.addEventListener("reading", () => {
-    
-    if ( !gyroFileDescriptor ) {
-        const date        = new Date();
-        gyroFilename       = `trial_gyro_${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}_${date.getHours()}-${date.getMinutes()}-${date.getSeconds()}`;
-        gyroFileDescriptor = openSync(gyroFilename, "w");
-    }
-
-    writeSync(accFileDescriptor, gyroscope.readings.x);
-    writeSync(accFileDescriptor, gyroscope.readings.y);
-    writeSync(accFileDescriptor, gyroscope.readings.z);
-});
+    AXIS_NAMES.forEach(axisName => writeSync(sensor.fileDescriptor, sensor.sensor.readings[axisName]));
+}
 
 // Handle sensor activity and files according to user interaction and update user interface
 manageRecordingButton.addEventListener("click", () => {
 
-    // Sensor is already working: stop it and close the file where it was writing the samples
-    if (accelerometer.activated) {
-        accelerometer.stop();
-        gyroscope.stop();
+    // Sensors are already working: stop them and close the files where they were writing the samples
+    if (isRecording) {
 
-        closeSync(accFileDescriptor);
-        closeSync(gyroFileDescriptor);
+        SENSORS.forEach(sensor => {
+
+            sensor.sensor.stop();
+            closeSync(sensor.fileDescriptor);
+
+            sensor.filename       = null;
+            sensor.fileDescriptor = null;
+
+        });
 
         manageRecordingText.text = "Start";
-        accFileDescriptor = accFilename = gyroFileDescriptor = gyroFilename = null;
 
-    // Sensor is not working: start it and open file to store the heart rate samples with an informative filename (trial_YYYY-MM-DD_HH-mm-ss)
+        isRecording = false;
+
+    // Sensors are not working, start recording:
     } else {
-        accelerometer.start();
-        gyroscope.start();
-    
+        SENSORS.forEach(sensor => sensor.sensor.start());
         manageRecordingText.text = "Stop";
+
+        isRecording = true;
     }
+
 });
 
 // Periodically try to send stored files with heart rate samples
@@ -98,19 +107,15 @@ setInterval(async () => {
     // Send files from smartwatch to phone:    
     const listDir = listDirSync(APP_DIRECTORY);
     let dirItem   = listDir.next();
-    
+
     while ( !dirItem.done ) {
 
-        console.log(`evaluating ${dirItem.value} to send ${!/^trial/.test(dirItem.value)}`)
-
-        // Only send files that store heart rate samples (the ones that start with
+        // Only send files that store IMU sensors samples (the ones that start with
         // "trial") and prevent sending the one that is currently being written
-        if (dirItem.value == accFilename || dirItem.value == gyroFilename || !/^trial/.test(dirItem.value) ) {
+        if (SENSORS.filter(sensor => sensor.filename == dirItem.value).length || !/^trial/.test(dirItem.value) ) {
             dirItem = listDir.next();
             continue;
         }
-
-        console.log(`about to send file ${dirItem.value}`);
 
         await outbox.enqueueFile(dirItem.value);
         dirItem = listDir.next();
