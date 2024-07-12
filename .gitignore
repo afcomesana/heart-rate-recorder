@@ -5,3 +5,4 @@ imu-fitbit-app/build
 .DS_Store
 trial_*
 __pycache__
+*.zip
