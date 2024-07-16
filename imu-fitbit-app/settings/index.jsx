@@ -1,119 +1,155 @@
 // https://dev.fitbit.com/build/guides/settings/
 // https://dev.fitbit.com/build/reference/settings-api/#components
 
-const TransferringFile = (filename, progress = 0, button = null) => (
-    <Section title={<Text bold align="center">{ filename }</Text>}>
-        <Text align="center">{ progress }% transferred</Text>
-        { button }
-    </Section>
-);
+// Convenient to be familiar with React: https://react.dev/learn
 
-const DeviceFiles = props => {
-    
-    if (!!props.settings.singleFileToAskFor) {
+import BulkFileActionSection   from "./components/BulkFileActionSection";
+import ConfirmFileDeletion     from "./components/ConfirmFileDeletion";
+import MainPage                from "./components/MainPage";
+import SingleFileActionSection from "./components/SingleFileActionSection";
+import TransferringFile        from "./components/TransferringFile";
+import { computeProgress }     from "./functions";
 
-        const { singleFileToAskFor, batchIndex, batchCount } = props.settings;
+import {
+    ALL_FILES_ACTION_DELETE_VALUE,
+    ALL_FILES_ACTION_NAME,
+    ALL_FILES_ACTION_RELOAD_VALUE,
+    ALL_FILES_ACTION_SEND_VALUE,
+    ASK_FOR_SINGLE_FILE_SETTINGS_NAME,
+    BATCH_COUNT_SETTINGS_NAME,
+    BATCH_INDEX_SETTINGS_NAME,
+    DELETE_SINGLE_FILE_SETTINGS_NAME,
+    FILES_LIST_SETTINGS_NAME,
+    FILE_BEING_TRANSFERRED_SETTINGS_NAME,
+    FILE_TRANSFER_QUEUE_SETTINGS_NAME
+} from "../common/constants";
 
-        const filename = JSON.parse(singleFileToAskFor).values[0].name;
+const HandleDeviceFiles = props => {
 
-        // Percetage of the file already sent to the laptop
-        let progress;
-        progress = parseInt(((parseInt(batchIndex) + 1)  / parseInt(batchCount)) * 100);
+    /**
+     * There are no files in the smartwatch, or they are not listed yet.
+     * Cannot perform any action on the files, so we only show the reload
+     * files button, which is always present in the MainPage component.
+     */
+    if (!props.settings[FILES_LIST_SETTINGS_NAME] || props.settings[FILES_LIST_SETTINGS_NAME].split(",").length == 0) {
+        return MainPage(props);
+    }
 
-        if ( isNaN(progress) ) {
-            progress = 0;
-        }
+    /**
+     * A file has been requested in the files-to-send files selector.
+     * Show information on how is the process going (percentage
+     * transferred).
+     */
+    if (!!props.settings[ASK_FOR_SINGLE_FILE_SETTINGS_NAME]) {
 
-        // Button that may be shown to go back to the "main page"
-        let flushFileTransferDataButton;
+        const filename = JSON.parse(props.settings[ASK_FOR_SINGLE_FILE_SETTINGS_NAME]).values[0].name;
+        const progress = computeProgress(props);
 
-        if ( progress === 100 ) {
-            flushFileTransferDataButton = <Button
+        /**
+         * Button to go back to the MainPage. This button only
+         * appears when the file has been completely transferred.
+         */
+        const flushFileTransferDataButton = progress === 100 ?
+            <Button
                 label="OK"
                 onClick={() => {
-                    props.settingsStorage.removeItem("singleFileToAskFor");
-                    props.settingsStorage.removeItem("batchIndex");
-                    props.settingsStorage.removeItem("batchCount");
+                    /**
+                     * Clear all the settings that have something to do
+                     * with the process of transferring a file so that
+                     * the Main Page is shown again.
+                     */
+                    props.settingsStorage.removeItem(ASK_FOR_SINGLE_FILE_SETTINGS_NAME);
+                    props.settingsStorage.removeItem(BATCH_INDEX_SETTINGS_NAME);
+                    props.settingsStorage.removeItem(BATCH_COUNT_SETTINGS_NAME);
                 }}
             />
-        }
+            : null;
 
+        /**
+         * Render how is the file transfer going. With or without the button
+         * to go back to the MainPage.
+         */
         return  (
             <Page>
                 { TransferringFile(filename, progress, flushFileTransferDataButton) }
             </Page>
-        )
+        );
+    } 
     
-    } else if ( !!props.settings.allFilesAction ) {
-
-        if ( props.settings.allFilesAction == "send" ) {
-
-            let { fileBeingTransferred, nextFilesToBeTransferred } = props.settings;
-
-            
-            let filesToBeTransferredList;
-            if ( nextFilesToBeTransferred ) {
-                filesToBeTransferredList = nextFilesToBeTransferred.split(",").map(filename => <Text align="center">{filename}</Text>);
-            }
-
-            return (
-                <Page>
-                    { TransferringFile(fileBeingTransferred) }
-                    <Section title={<Text align="center">Next files to be transferred</Text>}>
-                        { filesToBeTransferredList }
-                    </Section>
-                </Page>
-            )
-
-        } else if ( props.settings.allFilesAction == "delete" ) {
-
-        } else {
-            // WHAT
-        }
-
-        
+    /**
+     * User has selected a file to be deleted. To prevent accidental
+     * file deletions, render the deletion confirmation component.
+     */
+    if ( !!props.settings[DELETE_SINGLE_FILE_SETTINGS_NAME] ) {
+        return ConfirmFileDeletion(props, JSON.parse(props.settings[DELETE_SINGLE_FILE_SETTINGS_NAME]).values[0].name);
     }
+    
+    /**
+     * User has requested to send all of the files in the smartwatch.
+     * Current file being transferred and upcoming files to transfer
+     * are updated in the companion. Then this component is re-rendered
+     * with the new values for those variables.
+     */
+    if ( props.settings[ALL_FILES_ACTION_NAME] === ALL_FILES_ACTION_SEND_VALUE ) {
 
-    return (
-        <Page>
+        const progress = computeProgress(props);
+
+        let fileBeingTransferred = props.settings[FILE_BEING_TRANSFERRED_SETTINGS_NAME],
+            fileTransferQueue    = props.settings[FILE_TRANSFER_QUEUE_SETTINGS_NAME];
+
+        // If the queue has some file names:
+        fileTransferQueue = fileTransferQueue ?
+            // Convert those filenames to components that can be rendered
+            fileTransferQueue.split(",").map(filename => <Text align="center">{filename}</Text>)
+            // Otherwise, nothing will be rendered
+            : null;
+
+        /**
+         * Button to go back to the MainPage. This button only
+         * appears when the last file has been completely transferred.
+         */
+        const flushFileTransferDataButton = (progress === 100 && !fileTransferQueue) ?
             <Button
-                label="Reload files"
+                label="OK"
                 onClick={() => {
-                    props.settingsStorage.setItem("allFilesAction", "reload");
+                    /**
+                     * Clear all the settings that have something to do
+                     * with the process of transferring a file so that
+                     * the Main Page is shown again.
+                     */
+                    props.settingsStorage.removeItem(FILE_BEING_TRANSFERRED_SETTINGS_NAME);
+                    props.settingsStorage.removeItem(FILE_TRANSFER_QUEUE_SETTINGS_NAME);
+                    props.settingsStorage.removeItem(ALL_FILES_ACTION_NAME);
+                    props.settingsStorage.removeItem(BATCH_INDEX_SETTINGS_NAME);
+                    props.settingsStorage.removeItem(BATCH_COUNT_SETTINGS_NAME);
                 }}
             />
+            : null;
 
-            <Section title={<Text bold align="center">Single file actions</Text>}>
-                <Select
-                    label="Select a file to send"
-                    settingsKey="singleFileToAskFor"
-                    options={props.settings.files.split(",").map(filename => new Object({name: filename}))}
-                />
+        return (
+            <Page>
+                { TransferringFile(fileBeingTransferred, progress, flushFileTransferDataButton) }
+                <Section title={<Text align="center">Next files to be transferred</Text>}>
+                    { fileTransferQueue }
+                </Section>
+            </Page>
+        );
+    }
 
-                <Select
-                    label="Select a file to delete"
-                    settingsKey="filesToDelete"
-                    options={props.settings.files.split(",").map(filename => new Object({name: filename}))}
-                />
-            </Section>
+    /**
+     * User has requested to delete all the files in the smartwatch.
+     * As with the single file deletion request, just show the deletion
+     * confirmation component.
+     */
+    if ( props.settings[ALL_FILES_ACTION_NAME] === ALL_FILES_ACTION_DELETE_VALUE ) {
+        return ConfirmFileDeletion(props);
+    }
 
-            <Section title={<Text bold align="center">Bulk actions</Text>}>
-                <Button
-                    label="Send all files"
-                    onClick={() => {
-                        props.settingsStorage.setItem("allFilesAction", "send");
-                    }}
-                />
+    if ( props.settings[ALL_FILES_ACTION_NAME] === ALL_FILES_ACTION_RELOAD_VALUE ) {
+        return MainPage(props);
+    }
 
-                <Button
-                    label="Delete all files"
-                    onClick={() => {
-                        props.settingsStorage.setItem("allFilesAction", "delete");
-                    }}
-                />
-            </Section>
-        </Page>
-    );
+    return MainPage(props, SingleFileActionSection, BulkFileActionSection);
 }
 
-registerSettingsPage(DeviceFiles);
+registerSettingsPage(HandleDeviceFiles);

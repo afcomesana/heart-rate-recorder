@@ -10,7 +10,7 @@ String.prototype.toArrayBuffer = function() {
     return bufferedString;
 }
 
-export const sendCommand = (action, payload) => {
+export const sendCommand = (action, payload = null) => {
     const message = JSON.stringify({action, payload}).toArrayBuffer();
     const isCommand = new Uint8Array([1]);
 

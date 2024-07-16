@@ -55,20 +55,25 @@ def fitbit_endpoint():
     batch_initial_timestamp  = int(batch_initial_timestamp)
     filename                 = request.stream.read().decode().replace("\x00", "")
 
+    open_mode = "a"
+
     # First batch for this filename, initialize the file in the dictionary we use to check which
     # batches of which files have already been received:
-    if filename not in received_files.keys():
+    if filename not in received_files.keys() or all(received_files[filename]):
         received_files[filename] = [False] * batch_count
+        open_mode = "w"
         
     # Batch already received for this file:
     elif received_files[filename][batch_index]:
+        
+        print("File present in received files dictionary.")
         return "Testing", 500
     
     # Compute timestamp and write rows in file
     batch_samples = [[sample/100 for sample in struct.unpack("<%sh" % batch_size, axis_batch)] for axis_batch in batch_samples]
     batch_samples = zip(*batch_samples)
     
-    with open(filename, "a") as imufile:
+    with open(filename, open_mode) as imufile:
         for index, samples in enumerate(batch_samples):
             line = [batch_initial_timestamp + (delta_timestamp * index), *samples]
             line = ",".join(str(item) for item in line) + "\n"

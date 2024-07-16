@@ -1,7 +1,4 @@
 <svg>
   <rect id="background" />
-
-  <circle id="manage-recording-button" pointer-events="all" cx="50%" cy="50%" r= "140" fill="fb-white">
-    <text id="manage-recording-text" x="50%" y="50%+25" text-anchor="middle" font-size="80">Start</text>
-  </circle>
+  <text id="manage-recording-text" x="50%" y="50%+25" fill="fb-white" text-anchor="middle" font-size="50" text-length="10">IDLE</text>
 </svg>

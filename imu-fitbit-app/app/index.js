@@ -16,7 +16,7 @@ import {
     statSync
 } from "fs";
 
-import { APP_DIRECTORY, SAMPLE_FREQUENCY, AXIS_NAMES, SAMPLES_PER_BATCH, BYTES_PER_BATCH } from "../common/constants";
+import { APP_DIRECTORY, SAMPLE_FREQUENCY, AXIS_NAMES, SAMPLES_PER_BATCH, BYTES_PER_BATCH, LIST_FILES_ACTION_NAME, SEND_FILE_ACTION_NAME, DELETE_FILE_ACTION_NAME, RECORD_COMMAND_SETTINGS_NAME, IS_RECORDING_SETTINGS_NAME, FILE_LISTED_ACTION_NAME, FILE_LIST_COMPLETED_ACTION_NAME, FILE_DELETED_ACTION_NAME, DELETE_ALL_FILES_ACTION_VALUE, START_RECORD_ACTION_VALUE, STOP_RECORD_ACTION_VALUE } from "../common/constants";
 import { sleep, readMessage, sendCommand } from "../common/functions";
 
 String.prototype.toArrayBuffer = function() {
@@ -29,19 +29,11 @@ String.prototype.toArrayBuffer = function() {
     return bufferedString;
 }
 
-let isSendingFiles     = false,
-    hostIp             = "",
-    isRecording        = false;
-
 me.appTimeoutEnabled = false;
+const manageRecordingText = document.getElementById("manage-recording-text");
 
 // Keep screen always on:
 setInterval(() => display.poke(), 1000);
-
-// Get smartwatch screen elements
-const manageRecordingButton = document.getElementById("manage-recording-button");
-const manageRecordingText   = document.getElementById("manage-recording-text");
-
 
 const SENSORS = [
     {
@@ -56,7 +48,44 @@ const SENSORS = [
         "fileDescriptor": null,
         "filename": null,
     }
-]
+];
+
+/**
+ * Create file for the given sensor and write batch readings in it.
+ * @param {Object} sensor: One of the objects in the SENSORS array.
+ */
+const readingCallback = sensor => {
+    if ( sensor.fileDescriptor == null ) {
+        const date            = new Date();
+        const timestamp       = new Date().getTime(); // Add Unix timestamp in milliseconds
+        sensor.filename       = `trial_${sensor.filePrefix}_${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}_${date.getHours()}-${date.getMinutes()}-${date.getSeconds()}-${timestamp}`;
+        sensor.fileDescriptor = openSync(sensor.filename, "w");
+    }
+
+    AXIS_NAMES.forEach(axisName => writeSync(sensor.fileDescriptor, sensor.sensor.readings[axisName]));
+};
+
+const stopSensors = () => {
+    console.log("stopping sensors");
+
+    SENSORS.forEach(sensor => {
+
+        sensor.sensor.stop();
+        closeSync(sensor.fileDescriptor);
+
+        sensor.filename       = null;
+        sensor.fileDescriptor = null;
+
+    });
+
+    manageRecordingText.text = "IDLE";
+}
+
+const startSensors = () => {
+    console.log("starting sensors");
+    SENSORS.forEach(sensor => sensor.sensor.start());
+    manageRecordingText.text = "RECORDING";
+}
 
 SENSORS.forEach(sensor => sensor.sensor.addEventListener("reading", () => readingCallback(sensor)));
 
@@ -70,16 +99,29 @@ messaging.peerSocket.addEventListener("message", async event => {
     const { message: { action, payload } } = readMessage(event.data);
 
     switch(action) {
-        case "listFiles":
+        case LIST_FILES_ACTION_NAME:
             sendFilesListToCompanion();
             break;
 
-        case "sendFile":
+        case SEND_FILE_ACTION_NAME:
             sendFileToCompanion(payload);
             break;
 
-        case "deleteFile":
-            console.log(`file to delete: ${payload}`);
+        case DELETE_FILE_ACTION_NAME:
+            deleteFiles(payload);
+            break;
+
+        case RECORD_COMMAND_SETTINGS_NAME:
+
+            if ( payload === START_RECORD_ACTION_VALUE ) {
+                startSensors();
+                sendCommand(IS_RECORDING_SETTINGS_NAME, true);
+
+            } else if (payload === STOP_RECORD_ACTION_VALUE ) {
+                stopSensors();
+                sendCommand(IS_RECORDING_SETTINGS_NAME, false);
+            }
+
             break;
 
         default:
@@ -97,7 +139,7 @@ const sendFilesListToCompanion = () => {
     let dirItem   = listDir.next();
 
     while ( !dirItem.done ) {
-        sendCommand("listed_file", dirItem.value);
+        sendCommand(FILE_LISTED_ACTION_NAME, dirItem.value);
         dirItem = listDir.next();
 
         /**
@@ -114,11 +156,40 @@ const sendFilesListToCompanion = () => {
          * definition.
          */
     }
+    sendCommand(FILE_LIST_COMPLETED_ACTION_NAME);
+}
+
+const deleteFiles = filename => {
+
+    // Delete all the files:
+    if (filename === DELETE_ALL_FILES_ACTION_VALUE) {
+
+        const listDir = listDirSync(APP_DIRECTORY);
+        let dirItem   = listDir.next();
+
+        while ( !dirItem.done ) {
+            try {
+                unlinkSync(dirItem.value);
+            } finally {
+                dirItem = listDir.next();
+            }
+        }
+
+        sendCommand(FILE_DELETED_ACTION_NAME, filename);
+        return;
+    }
+
+    // Delete only one file:
+    try {
+        unlinkSync(filename);
+    } finally{
+        sendCommand(FILE_DELETED_ACTION_NAME, filename);
+    }
 }
 
 
 async function sendFileToCompanion(filename) {
-    console.log(`executing send file function for file: ${filename}`);
+    
     const fileDescriptor = openSync(filename, "r");
     const fileSize       = statSync(filename).size;
 
@@ -182,7 +253,6 @@ async function sendFileToCompanion(filename) {
             messaging.peerSocket.send(data);
             await sleep(5);
         }
-        console.log(`finisehd file transmision: ${filename}`);
     }
 
     catch(error) {
@@ -193,145 +263,3 @@ async function sendFileToCompanion(filename) {
     }
 
 }
-
-// /**
-//  * Create file for the given sensor and write batch readings in it.
-//  * @param {Object} sensor: One of the objects in the SENSORS array.
-//  */
-// const readingCallback = sensor => {
-//     if ( sensor.fileDescriptor == null ) {
-//         const date            = new Date();
-//         const timestamp       = new Date().getTime(); // Add Unix timestamp in milliseconds
-//         sensor.filename       = `trial_${sensor.filePrefix}_${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}_${date.getHours()}-${date.getMinutes()}-${date.getSeconds()}-${timestamp}`;
-//         sensor.fileDescriptor = openSync(sensor.filename, "w");
-//     }
-//     //     // Write headers to the file
-//     //     writeSync(sensor.fileDescriptor, AXIS_NAMES.join(",") + "\n");
-//     // }
-//     // // Add Unix timestamp to the readings
-//     // const timestamp = new Date().getTime();
-//     // console.log('timestamp is: ${timestamp}')
-//     // let dataString = `${timestamp}`;
-
-//     // // Append sensor readings to the data string
-//     // AXIS_NAMES.slice(1).forEach(axisName => {
-//     //     dataString += `,${sensor.sensor.readings[axisName]}`;
-//     // });
-
-//     // // Write the data string to the file
-//     // writeSync(sensor.fileDescriptor, dataString + "\n");
-//     // this is where data is written in the files
-//     AXIS_NAMES.forEach(axisName => writeSync(sensor.fileDescriptor, sensor.sensor.readings[axisName]));
-// };
-
-// // Handle sensor activity and files according to user interaction and update user interface
-// manageRecordingButton.addEventListener("click", () => {
-
-//     // Sensors are already working: stop them and close the files where they were writing the samples
-//     if (isRecording) {
-
-//         SENSORS.forEach(sensor => {
-
-//             sensor.sensor.stop();
-//             closeSync(sensor.fileDescriptor);
-
-//             sensor.filename       = null;
-//             sensor.fileDescriptor = null;
-
-//         });
-
-//         manageRecordingText.text = "Start";
-
-//         isRecording = false;
-
-//     // Sensors are not working, start recording:
-//     } else {
-//         SENSORS.forEach(sensor => sensor.sensor.start());
-//         manageRecordingText.text = "Stop";
-
-//         isRecording = true;
-//     }
-
-// });
-
-// // Periodically try to send stored files with heart rate samples
-// setInterval(async () => {
-
-//     // Prevent this function to run multiple times at once or if the server that has
-//     // to receive the samples is not up or its address is not known.
-//     if ( isSendingFiles || !hostIp ) {
-//         return;
-//     }
-//     console.log("about to send files")
-
-//     isSendingFiles = true;
-
-//     // Send files from smartwatch to phone:    
-//     const listDir = listDirSync(APP_DIRECTORY);
-//     let dirItem   = listDir.next();
-
-//     while ( !dirItem.done ) {
-
-//         // Only send files that store IMU sensors samples (the ones that start with
-//         // "trial") and prevent sending the one that is currently being written
-//         if (SENSORS.filter(sensor => sensor.filename == dirItem.value).length || !/^trial/.test(dirItem.value) ) {
-//             dirItem = listDir.next();
-//             continue;
-//         }
-//         console.log(`trying to send file ${dirItem.value}: ${statSync(dirItem.value).size}`);
-//         await outbox.enqueueFile(dirItem.value);
-//         dirItem = listDir.next();
-//     }
-
-//     isSendingFiles = false;
-
-// }, 5000); // Try to send files every 5 seconds
-
-// /**
-//  * 
-//  * @param {String} filename: name of the file received from the phone (companion) whose content has to be read
-//  * @returns {String}: the contents of the received file from the companion
-//  */
-// const readFile = (filename) => {
-
-//     const fd = openSync(filename, "r");
-
-//     // Each character in the file is stored using 2 bytes, so the buffer length to
-//     // read the whole content must be half the number of bytes of the file to read
-//     const buffer = new Uint16Array(parseInt(statSync(filename).size/2));
-    
-//     readSync(fd, buffer);
-//     closeSync(fd);
-
-//     return String.fromCharCode(...buffer); // parse bytes to characters
-// }
-
-// /**
-//  * Callback for the event of file received.
-//  * Read each received file form the phone (companion) and act accordingly.
-//  */
-// const processIncomingFiles = () => {
-//     let filename;
-
-//     while( filename = inbox.nextFile() ) {
-
-//         const payload = readFile(filename);
-
-//         // The companion found the IP of the host that stores the heart rate data:
-//         if (filename == "host_ip") {
-//             hostIp = payload;
-
-//         // The companion has received a file with heart rate samples, so we can delete that file:
-//         } else if ( filename == "delete_file" ) {
-//             console.log(`received command to delete file ${payload}`);
-//             // unlinkSync(payload)
-//         }
-
-//         // Delete the newly received file from companion:
-//         // unlinkSync(filename);
-//     }
-// }
-
-// // Set the callback for the event of file received from companion
-// inbox.addEventListener("newfile", processIncomingFiles);
-// processIncomingFiles(); // execute it already in case there is any file in queue
