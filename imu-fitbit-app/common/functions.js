@@ -1,4 +1,5 @@
 import * as messaging from "messaging";
+import { WAIT_FOR_FUNCTION_INTERVAL_MILLIS } from "./constants";
 
 String.prototype.toArrayBuffer = function() {
     const bufferedString = new Uint8Array(this.length);
@@ -49,7 +50,7 @@ export const waitFor = callback => new Promise((resolve, reject) => {
         if (callback()) {
             resolve(true);
         }
-    }, 500);
+    }, WAIT_FOR_FUNCTION_INTERVAL_MILLIS);
 });
 
 

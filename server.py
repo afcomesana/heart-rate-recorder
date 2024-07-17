@@ -26,8 +26,11 @@ def fitbit_ping():
     return "FITBIT_HOST", 200
 
 
-@app.post("/fitbit-endpoint/")
-def fitbit_endpoint():
+@app.post("/fitbit-endpoint-imu/")
+def fitbit_endpoint_imu():
+    # https://dev.fitbit.com/build/reference/device-api/gyroscope/#interface-batchedgyroscopereading
+    # https://dev.fitbit.com/build/reference/device-api/accelerometer/#interface-batchedaccelerometerreading
+    
     # TODO: Get batch size and delta timestamp from request or the file where is
     # defined, but don't define it hard-coded like this.
     batch_size      = 100
@@ -65,9 +68,7 @@ def fitbit_endpoint():
         
     # Batch already received for this file:
     elif received_files[filename][batch_index]:
-        
-        print("File present in received files dictionary.")
-        return "Testing", 500
+        return "RECEIVED_BATCH_INDEX-%s" % batch_index, 200
     
     # Compute timestamp and write rows in file
     batch_samples = [[sample/100 for sample in struct.unpack("<%sh" % batch_size, axis_batch)] for axis_batch in batch_samples]
@@ -86,22 +87,12 @@ def fitbit_endpoint():
     if all(received_files[filename]):
         # Use thread to prevent blocking the response to the Fitbit device (and potentially starting
         # to send the file again)
-        print("Completed file!!!!!", filename)
         threading.Thread(target=process_completed_file, args=[filename]).start()
-        return "COMPLETED_FILE-%s" % filename, 200
     
-        # If so, delete duplicates, order columns by timestamp and send response to smartwatch to delete the file
-    
-    return "OK", 200
+    return "RECEIVED_BATCH_INDEX-%s" % batch_index, 200
 
-     # Store accelerometer or gyroscope samples. According to Accelerometer and Gyroscope API
-    # documentation:
-    # https://dev.fitbit.com/build/reference/device-api/gyroscope/#interface-batchedgyroscopereading
-    # https://dev.fitbit.com/build/reference/device-api/accelerometer/#interface-batchedaccelerometerreading
-    #
-    # samples of these sensors are stored in Float32Arrays, hence 4 bytes per sample are needed to decode
-    # the values of the samples:
-        # Store heart rate samples in the given filename, each byte is a heart rate sample
+@app.post("/fitbit-endpoint/")
+def fitbit_endpoint():
     if re.search(HEART_RATE_FILE_PATTERN, filename) is not None:
         try:
             heart_rate_samples = request.stream.read(nbytes)

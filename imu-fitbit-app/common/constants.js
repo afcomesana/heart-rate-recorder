@@ -1,23 +1,27 @@
 // Files in the "common" directory are accessible from both companion (phone) and smartwatch (app)
 
-export const APP_DIRECTORY     = "/private/data/";
-export const SAMPLE_FREQUENCY  = 100;
-export const SAMPLES_PER_BATCH = 100;
-export const BYTES_PER_SAMPLE  = 4;
-export const BYTES_PER_BATCH   = SAMPLES_PER_BATCH*BYTES_PER_SAMPLE;
-export const AXIS_NAMES        = ["x", "y", "z"];
+export const APP_DIRECTORY                     = "/private/data/";
+export const SAMPLE_FREQUENCY                  = 100;
+export const SAMPLES_PER_BATCH                 = 100;
+export const BYTES_PER_SAMPLE                  = 4;
+export const BYTES_PER_BATCH                   = SAMPLES_PER_BATCH*BYTES_PER_SAMPLE;
+export const AXIS_NAMES                        = ["x", "y", "z"];
+export const WAIT_FOR_FUNCTION_INTERVAL_MILLIS = 500;
 
 // Settings properties names
-export const FILES_LIST_SETTINGS_NAME             = "filesList";
-export const ASK_FOR_SINGLE_FILE_SETTINGS_NAME    = "singleFileToAskFor";
-export const DELETE_SINGLE_FILE_SETTINGS_NAME     = "singleFileToDelete";
-export const BATCH_INDEX_SETTINGS_NAME            = "batchIndex";
-export const BATCH_COUNT_SETTINGS_NAME            = "batchCount";
-export const FILE_BEING_TRANSFERRED_SETTINGS_NAME = "fileBeingTransferred";
-export const FILE_TRANSFER_QUEUE_SETTINGS_NAME    = "fileTransferQueue";
-export const IS_RECORDING_SETTINGS_NAME           = "isRecording";
-export const RECORD_COMMAND_SETTINGS_NAME         = "recordCommand";
-export const HOST_IP_SETTINGS_NAME                = "hostIp";
+export const FILES_LIST_SETTINGS_NAME              = "filesList";
+export const ASK_FOR_SINGLE_FILE_SETTINGS_NAME     = "singleFileToAskFor";
+export const DELETE_SINGLE_FILE_SETTINGS_NAME      = "singleFileToDelete";
+export const BATCH_INDEX_SETTINGS_NAME             = "batchIndex";
+export const RECEIVED_BATCH_INDEX_SETTINGS_NAME    = "receivedBatchIndex"
+export const BATCH_COUNT_SETTINGS_NAME             = "batchCount";
+export const FILE_BEING_TRANSFERRED_SETTINGS_NAME  = "fileBeingTransferred";
+export const FILE_TRANSFER_QUEUE_SETTINGS_NAME     = "fileTransferQueue";
+export const IS_RECORDING_SETTINGS_NAME            = "isRecording";
+export const RECORD_COMMAND_SETTINGS_NAME          = "recordCommand";
+export const HOST_IP_SETTINGS_NAME                 = "hostIp";
+export const SUGGEST_RETRY_SEND_FILE_SETTINGS_NAME = "suggestRetrySendFile";
+export const RETRY_SEND_FILE_SETTINGS_NAME         = "retrySendFile";
 
 // Actions' names of the commands between phone and smartwatch
 export const SEND_FILE_ACTION_NAME           = "sendFile";

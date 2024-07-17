@@ -2,6 +2,8 @@
 // because that file imports the Messaging API which the settings don't
 // have access to. So it would raise an error.
 
+import { BATCH_COUNT_SETTINGS_NAME, BATCH_INDEX_SETTINGS_NAME, RECEIVED_BATCH_INDEX_SETTINGS_NAME } from "../common/constants";
+
 
 /**
  * Calculate the progress of the transferring process of a file from the smartwatch
@@ -13,19 +15,23 @@
  */
 export const computeProgress = props => {
 
-    const { batchIndex, batchCount } = props.settings;
+    const batchIndex         = props.settings[BATCH_INDEX_SETTINGS_NAME];
+    const receivedBatchIndex = props.settings[RECEIVED_BATCH_INDEX_SETTINGS_NAME];
+    const batchCount         = props.settings[BATCH_COUNT_SETTINGS_NAME];
 
-    if ( !batchIndex || !batchCount ) return 0;
+    if ( !batchIndex || !batchCount ) return [0, 0];
 
     // Percetage of the file already sent to the laptop
-    let progress;
-    progress = parseInt(((parseInt(batchIndex) + 1)  / parseInt(batchCount)) * 100);
+    let transferProgress,
+        receivedProgress;
 
-    if ( isNaN(progress) ) {
-        progress = 0;
-    }
+    transferProgress = parseInt((parseInt(batchIndex)  / parseInt(batchCount)) * 100);
+    transferProgress = isNaN(transferProgress) ? 0 : transferProgress;
 
-    return progress;
+    receivedProgress = parseInt((parseInt(receivedBatchIndex)  / parseInt(batchCount)) * 100);
+    receivedProgress = isNaN(receivedProgress) ? 0 : receivedProgress;
+
+    return [transferProgress, receivedProgress];
 }
 
 /**

@@ -60,6 +60,8 @@ const readingCallback = sensor => {
         const timestamp       = new Date().getTime(); // Add Unix timestamp in milliseconds
         sensor.filename       = `trial_${sensor.filePrefix}_${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}_${date.getHours()}-${date.getMinutes()}-${date.getSeconds()}-${timestamp}`;
         sensor.fileDescriptor = openSync(sensor.filename, "w");
+
+        sendCommand(FILE_LISTED_ACTION_NAME, sensor.filename);
     }
 
     AXIS_NAMES.forEach(axisName => writeSync(sensor.fileDescriptor, sensor.sensor.readings[axisName]));
@@ -175,16 +177,14 @@ const deleteFiles = filename => {
             }
         }
 
-        sendCommand(FILE_DELETED_ACTION_NAME, filename);
-        return;
+    // Delete only one file:
+    } else {
+        try {
+            unlinkSync(filename);
+        } catch { }
     }
 
-    // Delete only one file:
-    try {
-        unlinkSync(filename);
-    } finally{
-        sendCommand(FILE_DELETED_ACTION_NAME, filename);
-    }
+    sendCommand(FILE_DELETED_ACTION_NAME, filename);
 }
 
 
